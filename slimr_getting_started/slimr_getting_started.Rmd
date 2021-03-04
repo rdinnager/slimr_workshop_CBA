@@ -6,8 +6,11 @@ runtime: shiny_prerendered
 
 ```{r setup, include=FALSE}
 library(learnr)
-knitr::opts_chunk$set(echo = FALSE, comment = "",
-                      error = TRUE)
+knitr::opts_chunk$set(echo = TRUE, comment = "",
+                      error = TRUE,
+                      fig.width = 7,
+                      fig.height = 6,
+                      out.width = "80%")
 ```
 
 ```{r color, echo = FALSE, results='asis'}
@@ -93,7 +96,7 @@ isolate_sim
 
 Let's run that:
 
-```{r run_it, exercise=TRUE, exercise.eval=TRUE}
+```{r run_it, exercise=TRUE, exercise.eval=TRUE, echo=FALSE}
 iso_run <- slim_run(isolate_sim)
 ```
 
