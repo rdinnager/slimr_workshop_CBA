@@ -120,7 +120,11 @@ sim
 
 ```
 
-That's it! Your first simple simulation. `slim_script` calls contruct a script from a set of code blocks, which are created using calls to `slim_block`. This one has three blocks, the first sets up the simulation (the `initialize()` block), the second block does something in generation 1 (setting up the subpopulations), and the third does something in generation 100000 (ending the simulation). When this is run SLiM will use its default logic to simulate individuals and their genomes from generation 1 until the simulation is terminated. Migration will happen between the subpopulations automatically, mating will occur automatically too, as will mutations in the genome. Recombination will happen too. By default, SLiM simulates diploid genomes with recombination, but we can change this using code. By default SLiM only tracks mutations in the genome (and doesn't simulated actual nucleotide changes, though, again, we can change this). By default mutations that fix in the whole population are removed for performance reason, but once again, we can change this so that SLiM keeps track of them. To run the simulation in R, we simply use the `slim_run` function from `slimr`. Assuming you have setup your SLiM software correctly and connected it to R, this will take care of the running of your simulation. Let's try it.
+That's it! Your first simple simulation. A `slim_script` call contructs a script from a set of code blocks, which are created using calls to `slim_block`. This one has three blocks, the first sets up the simulation (the `initialize()` block), the second block does something in generation 1 (setting up the subpopulations), and the third does something in generation 100000 (ending the simulation). When this is run, SLiM will use its default logic to simulate individuals and their genomes from generation 1 until the simulation is terminated. Migration will happen between the subpopulations automatically, mating will occur automatically too, as will mutations in the genome. Recombination will happen too. 
+
+By default, SLiM simulates diploid genomes with recombination, but we can change this using code. By default SLiM only tracks mutations in the genome (and doesn't simulated actual nucleotide changes, though, again, we can change this). By default mutations that fix in the whole population are removed for performance reason, but once again, we can change this so that SLiM keeps track of them. The general logic of the evolutionary processes that are simulated by default in SLiM are governed by the Wright-Fisher model (WF), which assumes each subpopulation has a constant population size, and that generations do not overlap, such that each generation replaces the previous generation, but higher fitness individuals are more likely to have their offspring to be represented. Again, SLiM has a `nonWF` mode that let's you relax all of these assumptions and create much more complex simulations (we will see an example much later).
+
+To run the simulation in R, we simply use the `slim_run` function from `slimr`. Assuming you have setup your SLiM software correctly and connected it to R, this will take care of the running of your simulation. Let's try it.
 
 ```{r sim_run_1}
 
@@ -128,9 +132,9 @@ sim_run <- slim_run(sim)
 
 ```
 
-So that ran and gave an exit status of 0. That means the simulation worked and produced no errors. However, we don't have much useful now. This is because the simulation ran, but we didn't tell the simulation to produce anything. So our organisms migrated and mated, died and were born, all inside our computer, with no one watching. We can fix this by generating some output. This will use our first `slimr` verb. These are functions from `slimr` that can be inserted inside a SLiM based simulation that do useful things. In this case we will use `slim_output` to tell the simulation to capture some output and have it returned to R. So, one thing we might want to get out of this simulation is simply the genomes of the organisms at the end of the simulation. That is simple, we can do that like this:
+So that ran and gave an exit status of 0. That means the simulation worked and produced no errors. However, we don't have much of use now. This is because the simulation ran, but we didn't tell the simulation to produce anything. So our organisms migrated and mated, died and were born, all inside our computer, with no one watching. We can fix this by generating some output. This will use our first `slimr` verb. These are functions from `slimr` that can be inserted inside a SLiM based simulation that do useful things. In this case we will use `slim_output` to tell the simulation to capture some output and have it returned to R. So, one thing we might want to get out of this simulation is simply the genomes of the organisms at the end of the simulation. That is simple, we can do that like this:
 
-```{r basic_example}
+```{r basic_example2}
 sim <- slim_script(
   
   slim_block(initialize(), {
@@ -170,7 +174,7 @@ sim_run <- slim_run(sim)
 
 ```
 
-Now we have some output data in the `output_data` element of the returned object. But it is not in too useful form currently because it is just a character vector containing the entire dump produced by SLiM. This can be handy because it allows you to produced whatever custom output within SLiM you want, you just then need to figure out how to parse it from a character form yourself. There are many R functions that can help with this, in particular check out the `readr` and `stringr` packages. However, `slimr` has a number of helper function for importing the standard SLiM outputs into R in various useful formats. In this case, we can convert the `outputFull` output into a `genlight` object from the `adegenet` package, which is useful for SNP data. We do that like this.
+Now we have some output data in the `output_data` element of the returned object. But it is not in too useful a form currently because it is just a character vector containing the entire dump produced by SLiM. This can be handy because it allows you to produced whatever custom output within SLiM you want, but the disadvantage is you need to figure out how to parse it from a character form yourself in R. There are many R functions that can help with this, in particular check out the `readr` and `stringr` packages. However, `slimr` has a number of helper function for importing the standard SLiM outputs into R in various useful formats. In this case, we can convert the `outputFull` output into a `genlight` object from the `adegenet` package, which is useful for SNP data. We do that like this.
 
 ```{r genlight1}
 gl <- slim_output_genlight(sim_run)
@@ -186,6 +190,203 @@ So, how different are out populations? We can calculate a measure of population 
 ```{r calc_fst1}
 fst <- gl.fst.pop(gl, nboots = 1)
 fst
+```
+
+So that F~st~ value corresponds to roughly `r fst[2, 1] * 100`% of the variation in the genome can be explained by the population structure. This variation must have been produced by genetic drift in each subpopulation, because they are mostly genetically isolated, with only 1% of their populations being exchanged each generation. Let's explore genetic differentiation using F~st~ further. Let's calculate it in each generation and see how it changes over time. For this we can use a very efficient F~st~ calculation function within SLiM itself called [calcFST](http://benhaller.com/slim/SLiM_Manual.pdf#page=583). But note this won't necessarily be directly comparable with the F~st~ from `dartR` because they use different implementations. calculating it every generation for 100,000 is probably extreme, so we can use the `do_every` argument of `slimr_output` to only output the calculation every 100 generations. Here's a new script:
+
+```{r basic_example3}
+sim_fst <- slim_script(
+  
+  slim_block(initialize(), {
+    ## initialise global 'stuff'
+    ## initialize mutation rate
+    initializeMutationRate(1e-7)
+    ## initialize mutation types
+    initializeMutationType("m1", 0.5, "f", 0.0)
+    ## initialise mutation genomic element types
+    initializeGenomicElementType("g1", m1, 1.0)
+    ## initialise genomic elements
+    initializeGenomicElement(g1, 0, 100000 - 1)
+    ## initialise recombination rates
+    initializeRecombinationRate(1e-8)
+  }),
+  
+  slim_block(1, {
+    ## setup populations and other stuff in first generation
+    sim%.%SLiMSim$addSubpop("p1", 100)
+    sim%.%SLiMSim$addSubpop("p2", 100)
+    ## set migration rates between populations
+    p1%.%Subpopulation$setMigrationRates(p2, 0.01)
+    p2%.%Subpopulation$setMigrationRates(p1, 0.01)
+  }),
+  
+  slim_block(1, 100000, late(), {
+    ## output Fst
+    slimr_output(calcFST(p1.genomes, p2.genomes), name = "fst",
+                 do_every = 100)
+  }),
+  
+  slim_block(100000, late(), {
+    ## tell the simulation to finish
+    sim%.%SLiMSim$simulationFinished()
+  })
+)
+
+sim_fst
+
+```
+
+Let's run that and see what we get.
+
+```{r run_sim_fst}
+fst_run <- slim_run(sim_fst)
+fst_run$output_data
+```
+
+We can try and convert that to useable data using the `slim_results_to_data()` function.
+
+```{r extract_fst}
+fst_dat <- slim_results_to_data(fst_run) %>%
+  mutate(fst = as.numeric(unlist(data)))
+fst_dat
+```
+
+Now we can plot it over time:
+
+```{r plot_1}
+ggplot(fst_dat, aes(generation, fst)) +
+  geom_path() +
+  geom_smooth(fill = "grey30", colour = "red") +
+  theme_minimal()
+```
+
+Looks like it has already settled into a bit of an equilibrium by generation 100 (our first F~st~ measurement), whereby F~st~ spikes up occasionally but generally stays around a low average value, as indicated by a lack of trend in the smooth red fitted line, and it hovering around 0.075. But, what happens if we have no migration, or more migration? What happens if our populations start with different mutations? What if we increase or decrease equilibrium population size? We could just edit the code above, putting in new values on at a time and trying it, but that is pretty inefficient. What if we want to run a million simulations, all with different randomly drawn parameters? With `slimr`, that is simple. To do it we use another `slimr` verb, `slimr_template()`. This let's you insert 'templated' variables in a script, which can be filled in later with whatever you like. Let's setup one more script to use `slimr_template` for some of our simulation parameters.
+
+```{r basic_example4}
+
+sim_fst <- slim_script(
+  
+  slim_block(initialize(), {
+    ## initialise global 'stuff'
+    ## initialize mutation rate
+    initializeMutationRate(slimr_template("mut_rate", 1e-7))
+    ## initialize mutation types
+    initializeMutationType("m1", 0.5, "f", 0.0)
+    ## initialise mutation genomic element types
+    initializeGenomicElementType("g1", m1, 1.0)
+    ## initialise genomic elements
+    initializeGenomicElement(g1, 0, 100000 - 1)
+    ## initialise recombination rates
+    initializeRecombinationRate(1e-8)
+  }),
+  
+  slim_block(1, {
+    ## setup populations and other stuff in first generation
+    sim%.%SLiMSim$addSubpop("p1", slimr_template("pop_size", 100))
+    sim%.%SLiMSim$addSubpop("p2", ..pop_size..)
+    ## set migration rates between populations
+    p1%.%Subpopulation$setMigrationRates(p2, slimr_template("mig_rate", 0.01))
+    p2%.%Subpopulation$setMigrationRates(p1, ..mig_rate..)
+  }),
+  
+  slim_block(1, 100000, late(), {
+    ## output Fst
+    slimr_output(calcFST(p1.genomes, p2.genomes), name = "fst",
+                 do_every = 100)
+  }),
+  
+  slim_block(100000, late(), {
+    ## tell the simulation to finish
+    sim%.%SLiMSim$simulationFinished()
+  })
+)
+
+sim_fst
+
+```
+
+The first argument of `slimr_template` is the name of the templated variable you want to insert. You will use this name to refer to the variable later, when you want to replace it with a particular value. The second argument is the default value. If you don't specify a value for a templated variable later, when you "render" the script, the default value will be used. To insert values of your choice, use the `slimr_script_render()` function. This takes a `slimr_script` with templated variables, and a template (a list or data.frame with the name of variable to be replaced and their values). It is easiest to show this using an example. Let's make our simulation have zero migration between our populations and run it again.
+
+```{r first_template}
+sim_fst_zero <- slimr_script_render(sim_fst, template = list(mig_rate = 0))
+sim_fst_zero
+
+fst_zero_run <- slim_run(sim_fst_zero)
+
+fst_dat <- slim_results_to_data(fst_zero_run) %>%
+  mutate(fst = as.numeric(unlist(data)))
+
+ggplot(fst_dat, aes(generation, fst)) +
+  geom_path() +
+  geom_smooth(fill = "grey30", colour = "red") +
+  theme_minimal()
+
+```
+
+So there we have it. With no migration, F~st~ rapidly increases and eventually approaches 1, which is more or less complete differentiation. That means on average, each subpopulation has a unique set of mutations. This makes sense because mutations arise in each subpopulation separately, and have no way of spreading to the other subpopulation. The chances of the same mutation arising in both subpopulation is nearly nil. In fact it is nil in these simulations because by default SLiM treats all mutations as unique, even if by chance they are at the same position in the genome (this behaviour can of course be modified). Let's try reducing our population size:
+
+```{r first_template_lowpop}
+sim_fst_lowpop <- slimr_script_render(sim_fst, template = list(pop_size = 20))
+
+fst_lowpop_run <- slim_run(sim_fst_lowpop)
+
+fst_dat <- slim_results_to_data(fst_lowpop_run) %>%
+  mutate(fst = as.numeric(unlist(data)))
+
+ggplot(fst_dat, aes(generation, fst)) +
+  geom_path() +
+  geom_smooth(fill = "grey30", colour = "red") +
+  theme_minimal()
+
+```
+
+Again, we see rapid fluctuations of F~st~ but now hovering around an average of 0.15, so roughly twice as high as the first simulation. This is expected since a lower population size creates stronger genetic drift, allowing the subpopulations to drift further apart. But the migration between subpopulations still generates enough gene flow to keep them from drifting apart further and further, like in the last scenario.
+
+You can try changing the values of the three parameters in the following code, then run it to see how the results change:
+
+```{r simple_sim_exercise, exercise = TRUE, echo = FALSE}
+sim_fst_new <- slimr_script_render(sim_fst, 
+                                   template = list(mut_rate = 1e-7,
+                                                   pop_size = 100,
+                                                   mig_rate = 0.01))
+
+fst_new_run <- slim_run(sim_fst_new)
+
+fst_dat <- slim_results_to_data(fst_new_run) %>%
+  mutate(fst = as.numeric(unlist(data)))
+
+ggplot(fst_dat, aes(generation, fst)) +
+  geom_path() +
+  theme_minimal()
+```
+
+It might be a little easier to play around with parameters using the following little app (note that the next release of `slimr` will have a function to automatically generate an app like this for your simulation).
+
+```{r shiny_app, echo = FALSE}
+numericInput("mut_rate", "Mutation Rate:", min = 1e-9, max = 1e-5, value = 1e-7)
+sliderInput("pop_size", "Population Size:", min = 5, max = 500, value = 100)
+numericInput("mig_rate", "Migration Rate:", min = 0.0, max = 1.0, value = 0.01)
+submitButton()
+plotOutput("fst_plot")
+```
+
+```{r shiny_server, context = "server"}
+output$distPlot <- renderPlot({
+  
+  sim_fst_new <- slimr_script_render(sim_fst, 
+                                   template = list(mut_rate = input$mut_rate,
+                                                   pop_size = input$popsize,
+                                                   mig_rate = input$mig_rate))
+  
+  fst_new_run <- slim_run(sim_fst_new)
+
+  fst_dat <- slim_results_to_data(fst_new_run) %>%
+    mutate(fst = as.numeric(unlist(data)))
+  
+  ggplot(fst_dat, aes(generation, fst)) +
+    geom_path() +
+    theme_minimal()
+})
 ```
 
 
