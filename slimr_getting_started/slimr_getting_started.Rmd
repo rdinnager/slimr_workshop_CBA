@@ -36,7 +36,7 @@ library(slimr)
 
 Here are all the packages we will use throughout this tutorial. We will also set a random seed so that anytime this document is run we should get the same results.
 
-```{r load_libs, echo=TRUE}
+```{r load_libs, echo=TRUE, results='hide'}
 library(readr)
 library(dplyr)
 library(ggplot2)
@@ -193,7 +193,7 @@ fst <- gl.fst.pop(gl, nboots = 1)
 fst
 ```
 
-So that F~st~ value corresponds to roughly `r fst[2, 1] * 100`% of the variation in the genome can be explained by the population structure. This variation must have been produced by genetic drift in each subpopulation, because they are mostly genetically isolated, with only 1% of their populations being exchanged each generation. Let's explore genetic differentiation using F~st~ further. Let's calculate it in each generation and see how it changes over time. For this we can use a very efficient F~st~ calculation function within SLiM itself called [calcFST](http://benhaller.com/slim/SLiM_Manual.pdf#page=583). But note this won't necessarily be directly comparable with the F~st~ from `dartR` because they use different implementations. calculating it every generation for 100,000 is probably extreme, so we can use the `do_every` argument of `slimr_output` to only output the calculation every 100 generations. Here's a new script:
+So that F~st~ value corresponds to roughly `r format(fst[2, 1] * 100, digits = 2)`% of the variation in the genome can be explained by the population structure. This variation must have been produced by genetic drift in each subpopulation, because they are mostly genetically isolated, with only 1% of their populations being exchanged each generation. Let's explore genetic differentiation using F~st~ further. Let's calculate it in each generation and see how it changes over time. For this we can use a very efficient F~st~ calculation function within SLiM itself called [calcFST](http://benhaller.com/slim/SLiM_Manual.pdf#page=583). But note this won't necessarily be directly comparable with the F~st~ from `dartR` because they use different implementations. calculating it every generation for 100,000 is probably extreme, so we can use the `do_every` argument of `slimr_output` to only output the calculation every 100 generations. Here's a new script:
 
 ```{r basic_example3}
 sim_fst <- slim_script(
@@ -261,7 +261,7 @@ ggplot(fst_dat, aes(generation, fst)) +
   theme_minimal()
 ```
 
-Looks like it has already settled into a bit of an equilibrium by generation 100 (our first F~st~ measurement), whereby F~st~ spikes up occasionally but generally stays around a low average value, as indicated by a lack of trend in the smooth red fitted line, and it hovering around 0.075. But, what happens if we have no migration, or more migration? What happens if our populations start with different mutations? What if we increase or decrease equilibrium population size? We could just edit the code above, putting in new values on at a time and trying it, but that is pretty inefficient. What if we want to run a million simulations, all with different randomly drawn parameters? With `slimr`, that is simple. To do it we use another `slimr` verb, `slimr_template()`. This let's you insert 'templated' variables in a script, which can be filled in later with whatever you like. Let's setup one more script to use `slimr_template` for some of our simulation parameters.
+Looks like it has already settled into a bit of an equilibrium by generation 100 (our first F~st~ measurement), whereby F~st~ spikes up occasionally but generally stays around a low average value, as indicated by a lack of trend in the smooth red fitted line, and it hovering around `r format(mean(fst_dat$fst), digits = 2)`. But, what happens if we have no migration, or more migration? What happens if our populations start with different mutations? What if we increase or decrease equilibrium population size? We could just edit the code above, putting in new values on at a time and trying it, but that is pretty inefficient. What if we want to run a million simulations, all with different randomly drawn parameters? With `slimr`, that is simple. To do it we use another `slimr` verb, `slimr_template()`. This let's you insert 'templated' variables in a script, which can be filled in later with whatever you like. Let's setup one more script to use `slimr_template` for some of our simulation parameters.
 
 ```{r basic_example4}
 
@@ -341,7 +341,7 @@ ggplot(fst_dat, aes(generation, fst)) +
 
 ```
 
-Again, we see rapid fluctuations of F~st~ but now hovering around an average of 0.15, so roughly twice as high as the first simulation. This is expected since a lower population size creates stronger genetic drift, allowing the subpopulations to drift further apart. But the migration between subpopulations still generates enough gene flow to keep them from drifting apart further and further, like in the last scenario.
+Again, we see rapid fluctuations of F~st~ but now hovering around an average of `r format(mean(fst_dat$fst), digits = 2)`, so a fair bit higher than the first simulation. This is expected since a lower population size creates stronger genetic drift, allowing the subpopulations to drift further apart. But the migration between subpopulations still generates enough gene flow to keep them from drifting apart further and further, like in the last scenario.
 
 You can try changing the values of the three parameters in the following code, then run it to see how the results change:
 
@@ -372,11 +372,13 @@ plotOutput("fst_plot")
 ```
 
 ```{r shiny_server, context = "server"}
-output$distPlot <- renderPlot({
+library(slimr)
+
+output$fst_plot <- renderPlot({
   
   sim_fst_new <- slimr_script_render(sim_fst, 
                                    template = list(mut_rate = input$mut_rate,
-                                                   pop_size = input$popsize,
+                                                   pop_size = input$pop_size,
                                                    mig_rate = input$mig_rate))
   
   fst_new_run <- slim_run(sim_fst_new)
@@ -762,7 +764,7 @@ spat_run <- slim_run(spat_script)
 
 Okay that ran just fine. Now we can extract the coordinates of our individuals from the `slimr_results` object returned by `slim_run`, then use them to plot an animation of individual movement.
 
-```{r plot_anim_1}
+```{r plot_anim_1, cache = TRUE, cache.extra = seed}
 spat_dat <- slim_outputFull_extract(spat_run$output_data,
                                     "coordinates")
 
@@ -785,7 +787,7 @@ to replace the parental generation, and since offspring have the same spatial co
 
 Let's run a model with a few more individuals and see if we can look at population structure across our landscape. Then, we can see if we can add a little more complexity with spatial sexual reproduction. We can use the `slimr_script_render` function to generate a new script with different values of our templated variables.
 
-```{r run_model_with_more}
+```{r run_model_with_more, cache = TRUE, cache.extra = seed}
 spat_script_more <- slimr_script_render(spat_script, template = list(N = 500))
 spat_script_more
 
@@ -996,7 +998,7 @@ new_spat_run <- slim_run(new_spat_script_more)
 Running this model takes considerably longer, both because of the larger number of generations, and because of the more complex scenarios.
 Let's extract the coordinates and sex information and plot an animation.
 
-```{r get_anim}
+```{r get_anim, cache=TRUE, cache.extra=seed}
 coord_sex <- slim_results_to_data(new_spat_run$output_data %>%
                                     filter(name != "full_output"))
 
@@ -1033,13 +1035,13 @@ anim_more2 <- ggplot(dat_all, aes(x, y)) +
   transition_time(generation) +
   theme_minimal()
 
-animate(anim_more2, nframes = 2000, fps = 30)
+animate(anim_more2, nframes = 1000, fps = 30)
 ```
 
 Here's where we are at the end of the simulation:
 
 ```{r end_of}
-ggplot(dat_all %>% filter(generation == 10000), aes(x, y)) +
+ggplot(dat_all %>% filter(generation == 5000), aes(x, y)) +
   geom_raster(aes(fill = resistance), data = grad_data %>%
                 dplyr::mutate(x = x / 100, y = y / 100), 
               alpha = 0.5) +
@@ -1054,7 +1056,7 @@ Okay, let's look again at genetic differentiation.
 
 ```{r gen_diff_again}
 new_spat_gl <- slim_output_genlight(new_spat_run$output_data %>%
-                                      filter(generation == 10000))
+                                      filter(generation == 5000))
 plot(new_spat_gl)
 ```
 
@@ -1071,7 +1073,7 @@ plot(as.dendrogram(new_gen_clust) %>%
 new_gen_cut <- cutree(new_gen_clust, k = 12)
 
 dat_join <- dat_all %>%
-  filter(generation == 10000) %>%
+  filter(generation == 5000) %>%
   mutate(unique_ind_id = paste0("p1:i", data_id - 1L)) %>%
   left_join(tibble(unique_ind_id = names(new_gen_cut),
                    cluster = as.factor(new_gen_cut)))
@@ -1204,8 +1206,8 @@ spat_comp <- slim_script(
   slim_block(1, 1000, late(), {
     ## do_every parameter says to only
     ## output every 5 generations
-    slimr_output_coords("xy", do_every = 5)
-    slimr_output_sex(do_every = 5)
+    slimr_output_coords("xy")
+    slimr_output_sex()
   }),
   
   slim_block(1000, late(), {
@@ -1220,7 +1222,7 @@ spat_comp
 Here we've also demonstrated the use of nested `slimr` verbs. We've nested `slimr_template()` within `slimr_inline()` so that we can later change the name of the R object we want to insert easily, without having to respecify our whole script. We have to use the `unquote_strings = TRUE` argument for `slimr_template`, which makes sure that the character value we insert gets `unquoted` and treated as a symbol by R, and we have to use the `delay = TRUE` argument for `slimr_inline`, so that the evaluation of the R object doesn't happen right away, but rather, when the script is rendered.
 
 
-```{r big_sim}
+```{r big_sim, cache=TRUE, cache.extra=seed}
 
 spat_comp_run <- slim_run(spat_comp)
 
@@ -1260,7 +1262,7 @@ anim_spat_comp <- ggplot(dat_all, aes(x, y)) +
   transition_time(generation) +
   theme_minimal()
 
-animate(anim_spat_comp, nframes = 2000, fps = 30)
+animate(anim_spat_comp, nframes = 1000, fps = 30)
 
 
 coords <- slim_outputFull_extract(spat_comp_run$output_data %>%
@@ -1602,7 +1604,7 @@ ggplot(contrived_dat_join, aes(x, y)) +
 
 ```
 
-```{r animate_it_again}
+```{r animate_it_again, cache=TRUE, cache.extra=seed}
 coord_sex <- slim_results_to_data(spat_comp_fitness_run$output_data %>%
                                     filter(name != "full_output"))
 
@@ -1688,13 +1690,13 @@ test_value
 
 This is obviously a pretty trivial model. It runs a neutral evolution simulation on a single population of 100 individuals for a particular mutation rate, and return how many mutations there are in the population after 1000 generations. We will run ABC on this to see if we can recover the mutation rate by just feeding the algorithm the expected number of mutation at generation 1000. This is how that works:
 
-```{r easy_ABC_trivial}
+```{r easy_ABC_trivial, cache=TRUE, cache.extra=seed}
 ABC_test <- ABC_sequential(method = "Lenormand", model = run_mod,
                            prior = list(c("unif", 1e-9, 1e-6)),
                            summary_stat_target = test_value,
                            nb_simul = 1000,
                            use_seed = TRUE,
-                           progress_bar = TRUE)
+                           progress_bar = interactive())
 ```
 
 We used a prior for ABC that encompassed what we might consider a "realistic" range of values for the system (in this case, we can pretty much make that up, since we have no real system in mind).
@@ -1714,12 +1716,6 @@ ggplot(tibble(mu = ABC_test$param), aes(mu)) +
 
 Our ABC estimate appears to be a bit of an underestimate, but the true value of our original simulation is well within the posterior distribution of our ABC sample. So that is good.
 
-So now we will revisit our simple example based on the Simpson Desert small mammals and see if we can optimize the parameter combinations to produce our observed data (within some range of parameters of course)
-
-```{r small_mammal_ABC}
-
-
-```
 
 
 
