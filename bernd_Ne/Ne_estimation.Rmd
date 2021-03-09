@@ -42,7 +42,6 @@ library(tictoc)
 library(future)
 ```
 
-
 ```{r}
 tic()  #setting a timer to record the runtime
 
@@ -52,21 +51,15 @@ simngen<-50
 simnsnps <- 5000 
 ```
 
-#Simulation 
+# Simulation
 
 Simulate 5000 SNPs for a constant ideal population of a set number individuals over 50 generations. We will use set recombination rates (e.g. depending on the number and length of the chromosomes).
 
+## Recombination rate
 
-##Recombination rate
+The following code is to calculate recombination rate for a set number of snps (simsnps) randomly placed on the GED chromosomes. We take the distance between SNPs (if on the same chromosome) and calculate a recombination rate depending on the distance 1cM per 1 million bases). If on different chromosomes we set the recombination rate between SNPs as "0.5".
 
-
-The following code is to calculate recombination rate for a set number of snps (simsnps) randomly placed on the GED chromosomes. 
-We take the distance between SNPs (if on the same chromosome) and calculate a recombination rate depending on the distance 1cM per 1 million bases). If on different chromosomes we set the recombination rate between SNPs as "0.5". 
-
-
-Luckily we have a chromosome map for our species. 
-
-
+Luckily we have a chromosome map for our species.
 
 ```{r}
 #sample GED chromosom
@@ -96,13 +89,9 @@ snpends <- 0:4999
 
 ```
 
+\#The slim template
 
-#The slim template
-
-
-The next bit is to create a slim template that allows us to run our simulation scripts with several parameters. 
-
-
+The next bit is to create a slim template that allows us to run our simulation scripts with several parameters. A template is needed if you want to run several simulations with different settings. slimR allows you to easily incorportate R objects (e.g. vectors and matrices into slim scripts).
 
 ```{r}
 slim_script(
@@ -345,28 +334,3 @@ resg <- subset(res, RR=="P. vitt" & nSnp==2000)
 ggplot(resg, aes(x=factor(Nesim), y=Nee0/Nesim,fill=factor(sample)))+geom_boxplot()+facet_grid(RR~nSnp)+ylim(c(0,1))
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
