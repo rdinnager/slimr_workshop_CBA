@@ -1,8 +1,8 @@
 1  	* A number = sum of method(s) to run: LD(=1), Het(=2), Coan(=4), Temporal(=8).
-./ 	* Input Directory
-simtest.gen 	* Input file name
+./bernd_Ne/Neest/ 	* Input Directory
+sim11.gen 	* Input file name
 2 			* 1 = FSTAT format, 2 = GENEPOP format
-./out 	* Output Directory
+./bernd_Ne/Neest/ 	* Output Directory
 simtestLD.txt 	* Output file name (put asterisk adjacent to the name to append)
 3 			* Number of critical values, added 1 if a run by rejecting only singleton alleles is included
 0.0  0.05  0.01  -1  	* Critical values, a special value '1' is for rejecting only singleton alleles
