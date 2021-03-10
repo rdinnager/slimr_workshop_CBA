@@ -34,7 +34,7 @@ if(requireNamespace("fansi", quietly = TRUE)) {
 We need to load some packages here:
 
 ```{r load_packages}
-# setwd("/cloud/project/Luis_slimR")
+setwd("/cloud/project/Luis_slimR")
 path.folder_sim <- getwd()
 library(knitr)
 library(ggthemes)
@@ -54,10 +54,6 @@ library(stringr)
 library(parallel)
 library(future)
 library(furrr)
-
-library(gapminder)
-library(plotly)
-
 source('hierfstat.R')
 source('gHap.R')
 source('rotate_matrix_2.R')
@@ -129,7 +125,7 @@ At the end of a simulation create a VCF output.
 sims <- slim_script(
   
   slim_block(initialize(), {
-    setSeed(42);
+    #setSeed(606);
     # define nucleotide based simulation
     initializeSLiMOptions(nucleotideBased=T);
     # random nucleotides
@@ -139,7 +135,7 @@ sims <- slim_script(
     # deleterious mutations
     initializeMutationTypeNuc("m2", !!dominance, "f", !!s_del);
     # setting neutral and deleterious mutations. they are equally likely to arise
-    initializeGenomicElementType("g1", c(m1,m2), c(1,1), mmJukesCantor(slimr_template("mut_rate",2e-5)));
+    initializeGenomicElementType("g1", c(m1,m2), c(1,1), mmJukesCantor(slimr_template("mut_rate",3e-5)));
     # chromosomes
     initializeGenomicElement(g1, 0, !!chr_length-1);
     # recombiantion rate
@@ -191,11 +187,11 @@ sims <- slim_script(
 ![](rate_loss.jpg){width="758"}
 
 ```{r}
-Ne <- 100 # population size of the bottleneck
+Ne <- 500 # population size of the bottleneck
 ini_pop_size <- 1000 # initial population size
 gens <- 1000 # number of generations 
 gen_bottleneck <- gens-100 # generation when bottleneck occurs
-s_del <- 0 # selection coefficient od deleterious mutations
+s_del <- 0.0 # selection coefficient od deleterious mutations
 dominance <- 0.1 # dominance coefficient of dleterious mutations
 chr_length <- 10000 # number of nucleotides of the chromosomes
 mut_rate <- 3e-5 # mutation rate 
@@ -203,12 +199,12 @@ cM <- 100 # number of centiMorgans in the chromosome
 rec_rate <- (cM/100)/chr_length # recombination rate
 
 every_do <- 10 # output every X generation
-replicates <- 10 # number of simulations replicates
+replicates <- 5 # number of simulations replicates
 
 rate_of_loss <- 1 - (1 / (2 * Ne))
 
 # render script
-test_Ne <- slimr_script_render(sims,template = list(mut_rate=mut_rate),reps = replicates)
+test_Ne <- slimr_script_render(sims,template = list(mut_rate=3e-5),reps = replicates)
 # run the slim scripts in parallel by defining the number of workers. Please do not use more than 2 within rcloud to save computation hours.
 plan(multisession(workers = 2))
 # sun simulations 
@@ -252,31 +248,35 @@ all_sim <- print(ggplot(plot_het) +
                    theme(legend.text=element_text(size=14)))
 ```
 
-Background selection
+## Background selection
 
 ```{r}
-Ne <- 200 # population size of the bottleneck
+Ne <- 500 # population size of the bottleneck
 ini_pop_size <- 1000 # initial population size
 gens <- 1000 # number of generations 
 gen_bottleneck <- gens-100 # generation when bottleneck occurs
 s_del <- -0.01 # selection coefficient of deleterious mutations
-dominance <- 0.5 # dominance coefficient of deleterious mutations
+dominance <- 0.25 # dominance coefficient of deleterious mutations
 chr_length <- 10000 # number of nucleotides of the chromosomes
 mut_rate <- 3e-5 # mutation rate 
-cM <- 100 # number of centiMorgans in the chromosome
+cM <- 50 # number of centiMorgans in the chromosome
 rec_rate <- (cM/100)/chr_length # recombination rate
 
 every_do <- 10 # output every X generation
-replicates <- 10 # number of simulations replicates
+replicates <- 5 # number of simulations replicates
 
 rate_of_loss <- 1 - (1 / (2 * Ne))
 
 # render script
-BGS <- slimr_script_render(sims,template = list(mut_rate=mut_rate),reps = replicates)
+BGS <- slimr_script_render(sims,template = list(mut_rate=3e-5),reps = replicates)
 # run the slim scripts in parallel by defining the number of workers. Please do not use more than 2 within rcloud to save computation hours.
 plan(multisession(workers = 2))
 # sun simulations 
 BGS_res <- slim_run(BGS, throw_error = TRUE,parallel = TRUE)
+
+```
+
+```{r}
 
 # EXTRACTING DATA
 df_rows <- ((gens-gen_bottleneck)/every_do) + 1
@@ -313,7 +313,7 @@ all_sim <- print(ggplot(plot_het) +
 
 ```
 
-What happens with lower recombination and smaller population size?
+## What happens with lower recombination and smaller population size?
 
 ```{r}
 Ne <- 20 # population size of the bottleneck
@@ -323,8 +323,8 @@ gen_bottleneck <- gens-100 # generation when bottleneck occurs
 s_del <- -0.01 # selection coefficient of deleterious mutations
 dominance <- 0.5 # dominance coefficient of deleterious mutations
 chr_length <- 10000 # number of nucleotides of the chromosomes
-mut_rate <- 2e-5 # mutation rate 
-cM <- 10 # number of centiMorgans in the chromosome
+mut_rate <- 3e-5 # mutation rate 
+cM <- 50 # number of centiMorgans in the chromosome
 rec_rate <- (cM/100)/chr_length # recombination rate
 
 every_do <- 10 # output every X generation
@@ -339,6 +339,9 @@ plan(multisession(workers = 2))
 # sun simulations 
 AOD_res <- slim_run(AOD, throw_error = TRUE,parallel = TRUE)
 
+```
+
+```{r}
 # EXTRACTING DATA
 df_rows <- ((gens-gen_bottleneck)/every_do) + 1
 df_replicates_he <- as.data.frame(matrix(nrow =df_rows ,ncol = replicates ))
@@ -376,7 +379,7 @@ all_sim <- print(ggplot(plot_het) +
 
 **AOD's mechanism**
 
-In this example for a diploid organism with a 3-locus heterozygous haplotype, deleterious recessive variants (red squares, "a") are masked by the alternative alleles (brown squares, "A") of the opposite haplotype.As a result,both haplotypes, alpha and beta, will be maintained by linked selection, along with alleles at a linked neutral locus (blue squares, "1" and "2").This type of linked selection is called associative overdominance (AOD). However, recombination events (green arrows) can alter the linkage between loci which weaken the effects of AOD on genetic diversity.
+In this example for a diploid organism with a 3-locus heterozygous haplotype, deleterious recessive variants (red squares, "a") are masked by the alternative alleles (brown squares, "A") of the opposite haplotype. As a result,both haplotypes, alpha and beta, will be maintained by linked selection, along with alleles at a linked neutral locus (blue squares, "1" and "2").This type of linked selection is called associative overdominance (AOD). However, recombination events (green arrows) can alter the linkage between loci which weaken the effects of AOD on genetic diversity.
 
 ![](AOD.jpg){width="730"}
 
