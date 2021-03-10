@@ -34,7 +34,7 @@ if(requireNamespace("fansi", quietly = TRUE)) {
 We need to load some packages here:
 
 ```{r load_packages}
-# setwd("/cloud/project/Luis_slimR")
+setwd("/cloud/project/Luis_slimR")
 path.folder_sim <- getwd()
 library(knitr)
 library(ggthemes)
@@ -60,9 +60,17 @@ source('rotate_matrix_2.R')
 source('functions.R')
 ```
 
-# Unlinked loci
+# Unlinked loci assumption
 
-Most population genetic models assume that loci are inherited by offspring as independent units from their parents (due to sexual reproduction, random mating, independent assortment of chromosomes and recombination).
+Most population genetic models assume that loci are inherited by offspring as independent units from their parents due to:
+
+-    sexual reproduction
+
+-   random mating
+
+-   independent assortment of chromosomes and
+
+-   recombination
 
 However, loci that are close to each other on the same chromosome are often inherited together in clusters of different loci. This non-independent inheritance of loci will cause a non-random association between their alleles causing a linkage disequilibrium (LD) between loci.
 
@@ -88,9 +96,11 @@ We are going to use the Wright--Fisher model:
 
 -   constant population size
 
--   reproduce in non-overlapping generations.
+-   reproduce in non-overlapping generations
 
-Simulate first a large population then a population bottleneck
+We are going to simulate first a large population with high mutation rate and for 900 generations to obtain some genetic variation to work with. Then the population will experience a bottleneck, so we can observe how heterozygosity is lost across generations more clearly.
+
+This time we are going just to simulate deleterious mutations and neutral mutations.
 
 ```{r}
 #define some constants first
@@ -111,7 +121,7 @@ every_do <- 10 # output every X generation
 sims <- slim_script(
   
   slim_block(initialize(), {
-    setSeed(1010);
+    setSeed(42);
     # define nucleotide based simulation
     initializeSLiMOptions(nucleotideBased=T);
     # random nucleotides
@@ -313,7 +323,7 @@ rate_of_loss <- 1 - (1 / (2 * Ne))
 sims_BGS <- slim_script(
   
   slim_block(initialize(), {
-    setSeed(1010);
+    setSeed(42);
     # define nucleotide based simulation
     initializeSLiMOptions(nucleotideBased=T);
     # random nucleotides
@@ -418,7 +428,7 @@ all_sim_BGS <- print(ggplot(plot_het_BGS) +
 ## What happens in a small population?
 
 ```{r}
-Ne <- 20 # population size of the bottleneck
+Ne <- 30 # population size of the bottleneck
 ini_pop_size <- 1000 # initial population size
 gens <- 1000 # number of generations 
 gen_bottleneck <- gens-100 # generation when bottleneck occurs
@@ -437,7 +447,7 @@ rate_of_loss <- 1 - (1 / (2 * Ne))
 sims_AOD <- slim_script(
   
   slim_block(initialize(), {
-    setSeed(1010);
+    setSeed(58);
     # define nucleotide based simulation
     initializeSLiMOptions(nucleotideBased=T);
     # random nucleotides
@@ -539,29 +549,43 @@ all_sim <- print(ggplot(plot_het) +
 
 ```
 
-**AOD's mechanism**
+# Associative overdominance (AOD)
 
-In this example for a diploid organism with a 3-locus heterozygous haplotype, deleterious recessive variants (red squares, "a") are masked by the alternative alleles (brown squares, "A") of the opposite haplotype. As a result,both haplotypes, alpha and beta, will be maintained by linked selection, along with alleles at a linked neutral locus (blue squares, "1" and "2").This type of linked selection is called associative overdominance (AOD). However, recombination events (green arrows) can alter the linkage between loci which weaken the effects of AOD on genetic diversity.
+Overdominance arises when a heterozygote has a higher fitness than either homozygote. This is a type of balancing selection, where selection maintains two or more alleles in the population.
+
+In the case of AOD, an apparent overdominance occurs if an individual has two different haplotypes and each haplotype contains recessive deleterious alleles ("a") at different positions (Figure below).
+
+This arrangement of recessive deleterious alleles means that functionally normal alleles (alternative alleles "A") from one haplotype could mask the detrimental effects of deleterious alleles in the alternative haplotype. Hence, a homozygote of either haplotype will be less fit than a heterozygote, resulting in the maintenance of both haplotypes.
+
+Eventually, this will break up due to recombination occurring within the haplotypes.
+
+## **AOD's mechanism**
+
+In this example for a diploid organism with a 3-locus heterozygous haplotype, deleterious recessive variants (red squares, "a") are masked by the alternative alleles (brown squares, "A") of the opposite haplotype. As a result, both haplotypes, alpha and beta, will be maintained by linked selection, along with alleles at a linked neutral locus (blue squares, "1" and "2"). However, recombination events (green arrows) can alter the linkage between loci which weaken the effects of AOD on genetic diversity.
 
 ![](AOD.jpg){width="730"}
 
 ## Visualize haplotypes
 
-```{r}
+```{r opts_chunk$set(cache=F)}
+
 
 size_haplo <- 10
 ld_depth <- 30
 
 sim <- AOD_res
-which_replicate <- 3
+which_replicate <- 4
 source('visual.R')
+
+# number of deleterious mutations per individual
+del_per_ind
 
 ```
 
-```{r}
+```{r echo=FALSE, opts_chunk$set(cache=F)}
 p1
 ```
 
-```{r}
+```{r echo=FALSE, opts_chunk$set(cache=F)}
 p2
 ```
