@@ -146,8 +146,8 @@ slim_script(
 
 #df <- expand.grid(rep=1:10,  Ne = c(10,50), RR=c(0.001,0.005, 0.01,0.5,0.99))
 #df <- expand.grid(rep=1:15,  Ne = c(10,20,30,40,50,100), RR=round(mean(recrates),4)) #just to have a number
-df <- expand.grid(rep=1:3,  Ne = c(10,20), RR=c(0.0001,0.001))
-df <- expand.grid(rep=1:3,  Ne = c(10,20), RR=c(0.001,0.99))
+#df <- expand.grid(rep=1:3,  Ne = c(10,20), RR=c(0.0001,0.001))
+df <- expand.grid(rep=1:3,  Ne = c(10,20), RR=c(0.5,0.99))
 #RR = 0.99 = GED recrates!!!
 #df <- expand.grid(rep=1:5,  Ne = c(10,20,30,50), RR=c(0.005,0.99))
 
@@ -155,7 +155,7 @@ df <- expand.grid(rep=1:3,  Ne = c(10,20), RR=c(0.001,0.99))
 script_temp_df <- slimr_script_render(script_temp, template =df)
 #slim_run(script_temp_df[[1]])
 
-plan(multisession(workers = 4))
+plan(multisession(workers = 2))
 sr <- slim_run(script_temp_df,parallel = TRUE) #based on future plan
 
 #####
@@ -166,7 +166,7 @@ sr <- slim_run(script_temp_df,parallel = TRUE) #based on future plan
 #}
   
 
-files <- list.files(path="./bernd_Ne/Neest/",patter="out" )
+files <- list.files(path="./bernd_Ne/Neest/",pattern="out" )
 #gls <- list()
 #for (i in 1:length(files)){
 #  dumvcf<- read.vcfR(file.path("~/slimsim/out",files[i]),verbose=FALSE)
@@ -178,10 +178,10 @@ files <- list.files(path="./bernd_Ne/Neest/",patter="out" )
 #plot(1:length(gls),unlist(lapply(gls, function(x) mean(gl.Ho(x)))))
 
 
-snplevels <- c(100,500,1000,2000)
-snplevels <- c(100,200)
-sslevels <- c(10,20,30,40,50,100)
-sslevels <- c(7,8)
+#snplevels <- c(100,500,1000,2000)
+snplevels <- c(100,1000)
+#sslevels <- c(10,20,30,40,50,100)
+sslevels <- c(5,10)
 sim <- function(i)
 
   
@@ -259,12 +259,12 @@ cc <- cc+1
 return(res)
 } #gls files
 
-system.time(res <- mclapply(1:length(files), function(x) sim(x), mc.cores = 3))
+system.time(res <- mclapply(1:length(files), function(x) sim(x), mc.cores = 1))
 res<- do.call("rbind",res)
 
-write.csv(res,"res_all100.csv")
+#write.csv(res,"res_all100.csv")
 
-res <- res[complete.cases(res[,1:7]),]
+#res <- res[complete.cases(res[,1:7]),]
 
 
 #res <- res[complete.cases(res),]
@@ -277,6 +277,3 @@ toc()
 
 
 
-resg <- subset(res, RR=="P. vitt" & nSnp==2000)
-
-ggplot(resg, aes(x=factor(Nesim), y=Nee0/Nesim,fill=factor(sample)))+geom_boxplot()+facet_grid(RR~nSnp)+ylim(c(0,1))
