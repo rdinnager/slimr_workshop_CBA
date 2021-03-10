@@ -36,7 +36,7 @@ library(slimr)
 
 Here are all the packages we will use throughout this tutorial. We will also set a random seed so that anytime this document is run we should get the same results.
 
-```{r load_libs, echo=TRUE, results='hide'}
+```{r load_libs, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
 library(readr)
 library(dplyr)
 library(ggplot2)
@@ -343,9 +343,11 @@ ggplot(fst_dat, aes(generation, fst)) +
 
 Again, we see rapid fluctuations of F~st~ but now hovering around an average of `r format(mean(fst_dat$fst), digits = 2)`, so a fair bit higher than the first simulation. This is expected since a lower population size creates stronger genetic drift, allowing the subpopulations to drift further apart. But the migration between subpopulations still generates enough gene flow to keep them from drifting apart further and further, like in the last scenario.
 
-You can try changing the values of the three parameters in the following code, then run it to see how the results change:
+You can try changing the values of the three parameters in the following code, then run it to see how the results change. To make it run faster we've also reduced how long the simulation runs using the `slim_script_change_duration()` function:
 
 ```{r simple_sim_exercise, exercise = TRUE, echo = FALSE}
+sim_fst <- slim_script_duration(sim_fst, 10000)
+
 sim_fst_new <- slimr_script_render(sim_fst, 
                                    template = list(mut_rate = 1e-7,
                                                    pop_size = 100,
@@ -358,6 +360,7 @@ fst_dat <- slim_results_to_data(fst_new_run) %>%
 
 ggplot(fst_dat, aes(generation, fst)) +
   geom_path() +
+  geom_smooth(fill = "grey30", colour = "red") +
   theme_minimal()
 ```
 
@@ -374,6 +377,43 @@ plotOutput("fst_plot")
 ```{r shiny_server, context = "server"}
 library(slimr)
 
+sim_fst <- slim_script(
+  
+  slim_block(initialize(), {
+    ## initialise global 'stuff'
+    ## initialize mutation rate
+    initializeMutationRate(slimr_template("mut_rate", 1e-7))
+    ## initialize mutation types
+    initializeMutationType("m1", 0.5, "f", 0.0)
+    ## initialise mutation genomic element types
+    initializeGenomicElementType("g1", m1, 1.0)
+    ## initialise genomic elements
+    initializeGenomicElement(g1, 0, 100000 - 1)
+    ## initialise recombination rates
+    initializeRecombinationRate(1e-8)
+  }),
+  
+  slim_block(1, {
+    ## setup populations and other stuff in first generation
+    sim%.%SLiMSim$addSubpop("p1", slimr_template("pop_size", 100))
+    sim%.%SLiMSim$addSubpop("p2", ..pop_size..)
+    ## set migration rates between populations
+    p1%.%Subpopulation$setMigrationRates(p2, slimr_template("mig_rate", 0.01))
+    p2%.%Subpopulation$setMigrationRates(p1, ..mig_rate..)
+  }),
+  
+  slim_block(1, 10000, late(), {
+    ## output Fst
+    slimr_output(calcFST(p1.genomes, p2.genomes), name = "fst",
+                 do_every = 5)
+  }),
+  
+  slim_block(10000, late(), {
+    ## tell the simulation to finish
+    sim%.%SLiMSim$simulationFinished()
+  })
+)
+
 output$fst_plot <- renderPlot({
   
   sim_fst_new <- slimr_script_render(sim_fst, 
@@ -388,14 +428,176 @@ output$fst_plot <- renderPlot({
   
   ggplot(fst_dat, aes(generation, fst)) +
     geom_path() +
+    geom_smooth(fill = "grey30", colour = "red") +
     theme_minimal()
 })
 ```
 
+The last thing we are going talk about using this simple example, is how to use `slimr_template` and `slimr_script_render` to generate many different versions of the same script and run them all at the same time (in sequence or in parallel). First, we generate a set of parameter values we want to try out. We will create a `data.frame` to store these values. We will try 12 different values to start.
+
+```{r generate_params}
+nvals <- 12
+params <- data.frame(mut_rate = runif(nvals, 1e-9, 1e-6),
+                     pop_size = ceiling(runif(nvals, 10, 100)),
+                     mig_rate = rbinom(nvals, 1, 0.5) * runif(nvals, 0, 0.5))
+
+params
+```
+
+Now we can use this `data.frame` to set up multiple scripts. These are returned as a `slimr_script_coll` object, which is essentially a collection of `slimr_script`s.
+
+```{r make_slimr_script_coll}
+## make duration a bit shorter to speed up individual simulations
+sim_fst <- slim_script_duration(sim_fst, 10000)
+many_scripts <- slimr_script_render(sim_fst, template = params)
+
+many_scripts
+```
+
+By default only the first three scripts are shown, but we can see that all twelve are there:
+
+```{r lengthit}
+length(many_scripts)
+```
+
+Running all of these simulations is as simple as calling `slim_run` on our collection object. This will run each simulation in sequence. However, it is much more efficient to run them in parallel. This can be accomplished automatically using the `future` package. Using `future` we setup our parallel workers, then use the argument `parallel = TRUE` in `slim_run`, which will tell `slim_run` to automatically use any available `future` workers. Using `future` is as simple as specifying a `future::plan`, see the help for that function to see what options are available. Here we will use `multisession` parallel workers.
+
+```{r parallel}
+future::plan(future::multisession(workers = 4))
+all_run <- slim_run(many_scripts, parallel = TRUE)
+length(all_run)
+class(all_run)
+```
+
+So now we have results for 12 separate runs of the simulation. We can extract our F~st~ values from each of these simulations and plot them together. Handy functions for this are found in the `purrr` package which allow for simple iteration over lists (which is what a `slimr_results_coll` is). Here we run our F~st~ extraction code on each element of the results and bind them together into a single `tibble`.
+
+```{r get_all_fst}
+all_fst <- imap_dfr(all_run, 
+                    ~ slim_results_to_data(.x) %>%
+                      mutate(fst = as.numeric(unlist(data)),
+                             rep = .y))
+
+all_fst
+
+```
+
+Now plot them:
+
+```{r plot_all}
+
+ggplot(all_fst, aes(generation, fst)) +
+    geom_path(aes(group = rep), alpha = 0.6) +
+    theme_minimal()
+
+```
+
+<!-- Here is another app that will let you run the above as many times as you want, adding each time to the plot: -->
+
+<!-- ```{r shiny_app2, echo = FALSE} -->
+<!-- actionButton("run", "Run 12 Simulations") -->
+<!-- plotOutput("fst_plot2") -->
+<!-- ``` -->
+
+<!-- ```{r shiny_server2, context = "server"} -->
+<!-- library(slimr) -->
+<!-- library(purrr) -->
+<!-- library(ggplot2) -->
+
+<!-- sim_fst <- slim_script( -->
+
+<!--   slim_block(initialize(), { -->
+<!--     ## initialise global 'stuff' -->
+<!--     ## initialize mutation rate -->
+<!--     initializeMutationRate(slimr_template("mut_rate", 1e-7)) -->
+<!--     ## initialize mutation types -->
+<!--     initializeMutationType("m1", 0.5, "f", 0.0) -->
+<!--     ## initialise mutation genomic element types -->
+<!--     initializeGenomicElementType("g1", m1, 1.0) -->
+<!--     ## initialise genomic elements -->
+<!--     initializeGenomicElement(g1, 0, 100000 - 1) -->
+<!--     ## initialise recombination rates -->
+<!--     initializeRecombinationRate(1e-8) -->
+<!--   }), -->
+
+<!--   slim_block(1, { -->
+<!--     ## setup populations and other stuff in first generation -->
+<!--     sim%.%SLiMSim$addSubpop("p1", slimr_template("pop_size", 100)) -->
+<!--     sim%.%SLiMSim$addSubpop("p2", ..pop_size..) -->
+<!--     ## set migration rates between populations -->
+<!--     p1%.%Subpopulation$setMigrationRates(p2, slimr_template("mig_rate", 0.01)) -->
+<!--     p2%.%Subpopulation$setMigrationRates(p1, ..mig_rate..) -->
+<!--   }), -->
+
+<!--   slim_block(1, 10000, late(), { -->
+<!--     ## output Fst -->
+<!--     slimr_output(calcFST(p1.genomes, p2.genomes), name = "fst", -->
+<!--                  do_every = 5) -->
+<!--   }), -->
+
+<!--   slim_block(10000, late(), { -->
+<!--     ## tell the simulation to finish -->
+<!--     sim%.%SLiMSim$simulationFinished() -->
+<!--   }) -->
+<!-- ) -->
+
+<!-- future::plan(future::multisession(workers = 4)) -->
+
+<!-- nvals <- 12 -->
+<!-- params <- data.frame(mut_rate = runif(nvals, 1e-9, 1e-6), -->
+<!--                      pop_size = ceiling(runif(nvals, 10, 100)), -->
+<!--                      mig_rate = rbinom(nvals, 1, 0.5) * runif(nvals, 0, 0.5)) -->
+
+<!-- many_scripts <- slimr_script_render(sim_fst, template = params) -->
+
+<!-- all_run <- slim_run(many_scripts, parallel = TRUE) -->
+
+<!-- all_fst <- imap_dfr(all_run,  -->
+<!--                     ~ slim_results_to_data(.x) %>% -->
+<!--                       mutate(fst = as.numeric(unlist(data)), -->
+<!--                              rep = .y)) -->
+
+
+<!-- p <- ggplot(all_fst, aes(generation, fst)) + -->
+<!--     theme_minimal() -->
+
+<!-- rv <- reactiveValues(data = all_fst) -->
+
+<!-- observeEvent(input$run, { -->
+
+<!--   rv$data <- { -->
+
+<!--     params <- data.frame(mut_rate = runif(nvals, 1e-9, 1e-6), -->
+<!--                      pop_size = ceiling(runif(nvals, 10, 100)), -->
+<!--                      mig_rate = rbinom(nvals, 1, 0.5) * runif(nvals, 0, 0.5)) -->
+
+<!--     many_scripts <- slimr_script_render(sim_fst, template = params) -->
+
+<!--     all_run <- slim_run(many_scripts, parallel = TRUE) -->
+
+<!--     all_fst <- imap_dfr(all_run,  -->
+<!--                         ~ slim_results_to_data(.x) %>% -->
+<!--                           mutate(fst = as.numeric(unlist(data)), -->
+<!--                                  rep = .y)) -->
+<!--     all_fst -->
+
+<!--   } -->
+
+<!-- }) -->
+
+<!-- output$fst_plot2 <- renderPlot({ -->
+
+<!--   p <- p + -->
+<!--       geom_path(aes(group = rep), alpha = 0.6, data = rv$data) -->
+
+<!--   return(p) -->
+
+<!-- }) -->
+<!-- ``` -->
+
 
 ## Evolving Sequences
 
-[Nucleotide-based Models](http://benhaller.com/slim/SLiM_Manual.pdf#page=442)
+The above examples used the default method of generating mutations in SLiM which is simply to track where mutations have occurred relative to an initial genome in the simulation. By default there is no link between these mutations and any actual sequence change. In most cases, this is fine as a theoretically pure way of thinking about mutations. However, in real biological systems, often we are stuck with the much messier reality of DNA sequences, strings of four letters. Therefore there are many situations where you might want to be able to simulate DNA sequences evolving according to various rules. SLiM has a nucleotide-based simulation option, which allows you to simulate sequences evolving according to various classic evolutionary models (such as Jukes-Cantor etc.), Like everything else in SLiM, it is of course possible to customize a nucleotide-based model to create evolutionary scenarios of whatever complexity you want, including simulating indels, epigenetic interactions, etc. Here we will show a very simple nucleotide-based model, to give you an idea of how it is done, and to show that you can then use the many tools of R for manipulating and analysing nucleotide sequences to process the results of your simulation. To learn more about nucleotide-based models, see [here in the SLiM manual](http://benhaller.com/slim/SLiM_Manual.pdf#page=442). The following is a SLiM model that simulates 10 isolated subpopulations, evolving according to a Jukes-Cantor model of sequence evolution, and with all the regular dynamics of the default Wright-Fisher model.
 
 ```{r make_nuc_model, echo=TRUE}
 
@@ -428,9 +630,11 @@ isolate_sim
 
 Let's run that:
 
-```{r run_it, exercise=TRUE, exercise.eval=TRUE, echo=FALSE}
+```{r run_it}
 iso_run <- slim_run(isolate_sim)
 ```
+
+Above we used the `slimr` 'helper' function `slimr_output_nucleotides()`. This tells SLiM to output full nucleotide sequences for the full population. You can then extract these using the `slim_results_to_data()` function, which detects the nucleotide output and converts it into a `DNAStringSet` object from the package `Biostrings`.
 
 ```{r get_dna_data, echo=TRUE}
 dna <- slim_results_to_data(iso_run)
@@ -556,6 +760,41 @@ ggplot(pcoa, aes(V1, V2)) +
   theme_minimal()
 ```
 
+### The `!!` operator
+
+`!!` is the forcing operator (called the bang-bang operator), which we used above to insert the value of an R object into our `slim_script`. Why couldn't we just refer to the object directly? Let's see what happens if we try that. In this case we were referring to our R object `seed`. Here we remove the `!!` operator and try to run it.
+
+```{r test_no_op}
+
+isolate_sim_no_bang_bang <- slim_script(
+  slim_block(initialize(), {
+    setSeed(seed);
+    initializeSLiMOptions(nucleotideBased=T);
+    initializeAncestralNucleotides(randomNucleotides(1000));
+    initializeMutationTypeNuc("m1", 0.5, "f", 0.0);
+    initializeGenomicElementType("g1", m1, 1.0, mmJukesCantor(1e-5));
+    initializeGenomicElement(g1, 0, 1000 - 1);
+    initializeRecombinationRate(1e-8);
+  }),
+  slim_block(1, {
+    for(i in 1:10) {
+      sim.addSubpop(i, 100)  
+    }
+    
+  }),
+  # slim_block(1, 1000, late(), {
+  # }),
+  slim_block(10000, late(), {
+    slimr_output_nucleotides(subpops = TRUE)
+    sim.simulationFinished()
+  })
+)
+
+slim_run(isolate_sim_no_bang_bang)
+
+```
+
+So we see that SLiM generated an error, 'undefined identifier seed'. This is because all code inside a `slim_block` call is assumed to be SLiM code (except for `slimr` verbs), so that when we refer to `seed`, it is assumed we are referring to an object defined within SLiM, not within R. Using the !! operator overrides this behaviour, by 'forcing' execution of the code that follows it before anything else. Actually it does two things, it forces the object to be evaluated, and then inserts the results of that evaluation in its place. So in this case, `seed` is evaluated, returns the value we earlier assigned it, and then that is inserted into the `slim_block` call. This lets us mix and match references to R objects and SLiM objects in our scripts, which can be pretty handy. The only thing we need to be really careful of is the case where there is something inside SLiM with the same name as something in our environment. In that case it is possible to forget to use the `!!` operator, but our code will still work, with potentially unexpected consequences. Generally this will be rare though. For a more systematic way to insert values from R into a script (and one that doesn't require rerunning the `slim_script` call), you can use `slimr_template`, which we discussed in the first set of examples.
 
 
 

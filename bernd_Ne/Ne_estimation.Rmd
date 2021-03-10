@@ -37,21 +37,17 @@ library(slimr)
 library(dartR)
 library(vcfR)
 library(parallel)
-source("./bernd_Ne/gl2genepop.r")
+source("/cloud/project/bernd_Ne/gl2genepop.r")
 library(tictoc)
 library(future)
 ```
 
 ```{r}
-tic()  #setting a timer to record the runtime
-
-## number of generations to simulate
-simngen<-50  
 ## number of snps to simulate
 simnsnps <- 5000 
 ```
 
-# Simulation
+## Simulation
 
 Simulate 5000 SNPs for a constant ideal population of a set number individuals over 50 generations. We will use set recombination rates (e.g. depending on the number and length of the chromosomes).
 
@@ -63,7 +59,7 @@ Luckily we have a chromosome map for our species.
 
 ```{r}
 #sample GED chromosom
-gedchromo <- read.csv("./bernd_Ne/GED_chromosomes.csv") #averaged length of sex chromosome.
+gedchromo <- read.csv("/cloud/project/bernd_Ne/GED_chromosomes.csv") #averaged length of sex chromosome.
 
 
 total.chromo <- sum(gedchromo$csize)* 1e6  #length in bases
@@ -89,9 +85,33 @@ snpends <- 0:4999
 
 ```
 
-\#The slim template
+## The slim template
 
 The next bit is to create a slim template that allows us to run our simulation scripts with several parameters. A template is needed if you want to run several simulations with different settings. slimR allows you to easily incorportate R objects (e.g. vectors and matrices into slim scripts).
+
+The script is simulating the following:
+
+1.  Create a population of size
+
+```{r}
+#define some constants first
+
+tic()  #setting a timer to record the runtime
+
+## number of generations to simulate
+simngen<-50  
+
+```
+
+Use the settings from df (rep, Ne and RR) and also setup the simulation.
+
+The simulation runs Ne individuals for 50 generations (with 20 generation of a burnin with a very high mutation rate and then 30 generations with a low mutation rate to create our SNP data. Please note this needs to be set a bit longer in a real simulation. Here fairly low values to allow the simulations run fast.
+
+We simulate simnsnps (5000) by randomly initialising a sequence of 5000 nucleotides. Then we only allow mutations from A-\>C (C-\>A) and G-\>T (T-\>G), which makes sure there are only two allelels in at a single loci.
+
+If RR is set to 0.99 we use the recombination rate calcuated above, otherwise we use a constante recombination rate between SNPs.
+
+At the end of a simulation create a VCF output.
 
 ```{r}
 slim_script(
@@ -99,48 +119,42 @@ slim_script(
              {
                defineConstant("alpha1", 0.1);
                defineConstant("alpha2", 1e-8);
-               ##defineConstant("Ne",10);
-               ## set the overall mutation rate
-               #initializeMutationRate(0.05); 
                
-               ##defineConstant("test_vector", slimr_inline(recrates[[slimr_template("index", 0)]], delay = TRUE));
                defineConstant("rates", slimr_inline(recrates));
                defineConstant("ends", slimr_inline(snpends));
                
                
-            
-               
+         
                ## m1 mutation type: neutral
                defineConstant("L", !!simnsnps);
                defineConstant("simlen", !!simngen);
                
-               #how many outputs (simlen=only once at the end)
+               #how many outputs (simlen=only once at the end set here)
                defineConstant("every", simlen);
-               initializeSLiMOptions(nucleotideBased=T);
-               initializeAncestralNucleotides(randomNucleotides(L));
-               initializeMutationTypeNuc("m1", 0.5, "f",0.0 );
-               m1.mutationStackPolicy = "l";
-               m1.convertToSubstitution=T;
+               
+               initializeSLiMOptions(nucleotideBased=T);  #define Nucleotid based simulation
+               initializeAncestralNucleotides(randomNucleotides(L)); #random starting status (the same for every individual!!!!)
+               
+               initializeMutationTypeNuc("m1", 0.5, "f",0.0 ); #neutral mutations (dominance coefficient and distribution of fitness effect)
+               m1.mutationStackPolicy = "l"; #only last mutation is kept
+               m1.convertToSubstitution=T;  #we are allowed to loose loci (if fixed)
+               
                ## g1 genomic element type: uses m1 for all mutations
                defineConstant("mm", matrix(c(0.0,alpha1,0.0,0.0, alpha1,0.0,0.0,0.0, 0.0,0.0,0.0,alpha1, 0.0,0.0,alpha1,0.0 ),nrow=4, ncol=4));
                defineConstant("mm2", matrix(c(0.0,alpha2,0.0,0.0, alpha2,0.0,0.0,0.0, 0.0,0.0,0.0,alpha2, 0.0,0.0,alpha2,0.0 ),nrow=4, ncol=4));
                initializeGenomicElementType("g1", m1, 1.0, mm);
-               #initializeGenomicElementType("g1", m1, 1.0);
-               ## uniform chromosome of length 100 kb
-               initializeGenomicElement(g1, 0, L-1);
-               ## uniform recombination along the chromosome
-               #initializeRecombinationRate(slimr_template("RR"));
-               #calculated recombination rates
                
+               initializeGenomicElement(g1, 0, L-1);  #now set up a genome of 5000 snps
+               
+               #set recombination rates along the genomice element
                crates = rates
                if (slimr_template("RR")!=0.99)  crates = rep(slimr_template("RR"),5000); #change to constant or use GED version
                  
                initializeRecombinationRate(rates = crates, ends = ends)     
                
-               ##initializeRecombinationRate(slimr_template("RR")));
                
              }),
-  slim_block(1,
+  slim_block(1, 
              {
                sim.addSubpop("p1",slimr_template("Ne"));
              }),
@@ -148,100 +162,118 @@ slim_script(
 
   
   slim_block(1,simngen,late(), {
-         
+                #create an output at the end only here
                if (sim.generation / every== round(sim.generation/every)) {
                pre = ""
                if (sim.generation<100) pre="0" 
                if (sim.generation<10) pre="00" 
-               nn = paste0( c("./bernd_Ne/Neest/out","_Ne_",slimr_template("Ne"),"_rep_",slimr_template("rep"),"_RR_",slimr_template("RR"),"_",pre,sim.generation,".vcf")) ;
+               nn = paste0( c("/cloud/project/bernd_Ne/Neest/out","_Ne_",slimr_template("Ne"),"_rep_",slimr_template("rep"),"_RR_",slimr_template("RR"),"_",pre,sim.generation,".vcf")) ;
                
                p1.individuals.genomes.outputVCF(nn, simplifyNucleotides=T);
               
-               
-               ##c = sim.chromosome;
-               ##catn("Ancestral: " + c.ancestralNucleotides());
-               
-               
-              ## g = p1.genomes[0];
-              ## catn("Derived:   " + g.nucleotides());
-               
-              ## catn("SNPs: " + paste(g.mutations.nucleotide));
-              } ##end every
+             } ##end every
              }),
-  
+  #set mutation rate to lower values after 20 generations
   slim_block(20, early(), {
     g1.setMutationMatrix(mm2);
   }),
   
   
-  
+  #finish the simultion (to free memory)
   slim_block(simngen, late(), {
-    ##sim.outputFull("model_output.txt");
                sim.simulationFinished();
-              ## sim.outputFull();
-              ## allIndividuals = p1.individuals;
-               
-             
              })
 ) -> script_temp
 
-##slimr_template_info(script_temp)
-##script_dummy <- slimr_script_render(script_temp, template=(data.frame(rep=1, Ne=50)))
-##slimr_write(script_dummy[[1]], "script_dummy.txt")
-##system("./slim script_dummy.txt")
+```
 
+## Create slim scripts
 
-##slimr::slim_run(script_1)
+We can now check the template script (which has three place holders [rep, Ne, RR]). If RR=0.99 the script will use the GED recombination rates calculated above, otherwise it will use a constant recombination rate for all SNPs (0.001=highly lined and 0.5=all on different chromosomes)
 
-#df <- expand.grid(rep=1:100,  Ne = c(10,20,30,40,50,100), RR=c(0.0001,0.001,0.005, 0.01,0.1,0.50,0.99))
+```{r}
+#RR = 0.99 = using GED recombination rates
+df <- expand.grid(rep=1:3,  Ne = c(10,20), RR=c(0.001,0.5, 0.99))
+df
 
+```
 
-#df <- expand.grid(rep=1:10,  Ne = c(10,50), RR=c(0.001,0.005, 0.01,0.5,0.99))
-#df <- expand.grid(rep=1:15,  Ne = c(10,20,30,40,50,100), RR=round(mean(recrates),4)) #just to have a number
-df <- expand.grid(rep=1:3,  Ne = c(10,20), RR=c(0.0001,0.001))
-df <- expand.grid(rep=1:3,  Ne = c(10,20), RR=c(0.001,0.99))
-#RR = 0.99 = GED recrates!!!
-#df <- expand.grid(rep=1:5,  Ne = c(10,20,30,50), RR=c(0.005,0.99))
+We use the function slim_script_render to create 18 template scripts (in a list), that includes now values for the place holders.
 
+```{r}
 
 script_temp_df <- slimr_script_render(script_temp, template =df)
-#slim_run(script_temp_df[[1]])
 
-plan(multisession(workers = 4))
+
+script_temp_df[[1]]
+```
+
+Now we can run the slim scripts in parallel by defining the number of workers. Please do not use more than 2 within rcloud to save computation hours.
+
+```{r}
+
+#if you want to run a single script 
+#slim_run(script_temp_df[[1]])
+#check the simulation files in the Neest folder
+
+plan(multisession(workers = 2))
 sr <- slim_run(script_temp_df,parallel = TRUE) #based on future plan
 
-#####
-#for (i in 1:nrow(df))
-#{
-#slimr_write(script_temp_df[[i]], "script_dummy.txt")
-#system("./slim script_dummy.txt")
-#}
-  
 
-files <- list.files(path="./bernd_Ne/Neest/",patter="out" )
-#gls <- list()
-#for (i in 1:length(files)){
-#  dumvcf<- read.vcfR(file.path("~/slimsim/out",files[i]),verbose=FALSE)
-#  gls[[i]]<- vcfR2genlight(dumvcf)
-#  names(gls)[i] <- files[i]
-#}  
+```
 
-#unlist(lapply(gls,nLoc))
-#plot(1:length(gls),unlist(lapply(gls, function(x) mean(gl.Ho(x)))))
+## check vcf outputs
+
+We want to check the output files. Here a quick and dirty way to read all files in and get the number of loci and heterozygosity.
+
+```{r}
+
+files <- list.files(path="/cloud/project/bernd_Ne/Neest/",pattern="out" )
 
 
-snplevels <- c(100,500,1000,2000)
-snplevels <- c(100,200)
-sslevels <- c(10,20,30,40,50,100)
-sslevels <- c(17,33)
+gls <- list()
+for (i in 1:length(files)){
+  dumvcf<- read.vcfR(file.path("/cloud/project//bernd_Ne/Neest",files[i]),verbose=FALSE)
+  gls[[i]]<- vcfR2genlight(dumvcf)
+  names(gls)[i] <- files[i]
+}  
+
+#some tests/output on the simulated files
+#number of loci
+unlist(lapply(gls,nLoc))
+
+#number of individuals
+unlist(lapply(gls,nInd))
+
+#mean observed Heterozygosity for all 18 simulations
+plot(1:length(gls),unlist(lapply(gls, function(x) mean(gl.Ho(x)))),pch=16)
+
+```
+
+## Run Neestimator from within R
+
+Now that we have our 18 simulations the next step is the following:
+
+1.  sample different levels of SNPs (snplevels)
+2.  sample different levels of individuals (sslevels)
+3.  Run Neestimator over all levels for all 18 simulations
+4.  Collect the results from the Nestimator results into a data.frame
+5.  Visualise the results.
+
+The idea here is the following. steps 1-3 are wrapped into a simulation function. Then we run the simulation function via an mcapply, which allows to run the jobs in parallel if needed.
+
+```{r}
+
+
+
+snplevels <- c(100,200)  #snp levels
+
+sslevels <- c(5,10)  #numberof individuals
+
+##the simulation function
 sim <- function(i)
-
-  
-  
-#for (i in 1:length(gls))
 {
-  
-  dumvcf<- read.vcfR(file.path("./bernd_Ne/Neest/",files[i]),verbose=FALSE)
+  dumvcf<- read.vcfR(file.path("/cloud/project//bernd_Ne/Neest/",files[i]),verbose=FALSE)
   gls<- vcfR2genlight(dumvcf)
   namesgls <- files[i]  
   
@@ -272,22 +304,25 @@ for (iii in 1:length(sslevels))
   if (ss<=nInd(glout))
   {
 
+#subsample the simulated population
 gldummy <- glout[sample(1:nInd(glout), ss,replace = FALSE),sample(1:nLoc(glout), nSnp, replace = FALSE)]
 
 
-gl2genepop(gldummy,paste0("./Neest/slimne",i,".gen"))
+#create a genepop files
+gl2genepop(gldummy,paste0("/cloud/project/bernd_Ne/Neest/slimne",i,".gen"))
 
-inf <- readLines("./Neest/info")
+#adjust the info file for Neeest
+inf <- readLines("/cloud/project/bernd_Ne/Neest/info")
 inf[3]<-paste0("slimne",i,".gen")
-
 inf[6]<- paste0("slimLD",i,".txt")
 con <- file(paste0("./Neest/info",i),"w")
 writeLines(inf, con)
 close(con)
 
-system(paste0("./Neest/Ne2-1L i:./Neest/info",i))
+#run the Neestimator
+system(paste0("/cloud/project/bernd_Ne/Neest/Ne2-1L i:/cloud/project/bernd_Ne/Neest/info",i))
 
-ll <- readLines(paste0("./Neest/slimLD",i,".txt"))
+ll <- readLines(paste0("/cloud/project/bernd_Ne/Neest/slimLD",i,".txt"))
 index <- grep("Estimated Ne", ll)
 nes <- unlist(strsplit(ll[index],split = "[ ]+"))
 index <- grep("JackKnife on Samples", ll)
@@ -299,38 +334,36 @@ Nee0_up <- as.numeric(nesup[length(nesup)])
 
 res[cc,]<- c(nrep, Nesim, nGen, nSnp, ss, nRR, Nee0, Nee0_low, Nee0_up)
 cc <- cc+1
-#res<- c(nrep, Nesim, nGen, nSnp, ss, Nee0, Nee0_low, Nee0_up)
-
-
-#cat(paste("run",cc,"\n"))
-#flush.console()
 } #endif ss<= nInd
 } #end iii
   } #if snplevels < nLoc
 } #end ii (nSnps)
 return(res)
-} #gls files
+} #end sim function
 
-system.time(res <- mclapply(1:length(files), function(x) sim(x), mc.cores = 30))
+system.time(res <- mclapply(1:length(files), function(x) sim(x), mc.cores = 1))
+
+```
+
+## Collect the results 
+
+All the is needed todo is now collect the results from the data.frame and plot
+
+Step 4 and 5 below:
+
+```{r}
+
+#unlist the output from the parallel runs
 res<- do.call("rbind",res)
 
-write.csv(res,"res_all100.csv")
+#in case you wan to to save the results
+#write.csv(res,"res_sim18.csv")
 
-res <- res[complete.cases(res[,1:7]),]
 
 
-#res <- res[complete.cases(res),]
 ggplot(res, aes(x=factor(Nesim), y=Nee0/Nesim,fill=factor(sample)))+geom_boxplot()+facet_grid(RR~nSnp)+ylim(c(0,1))
 
 
-#ggplot(resall, aes(x=factor(Nesim), y=Nee0,fill=factor(run)))+geom_boxplot()+facet_wrap(.~nSnp)+ylim(c(0,60))
-
+#stop the clock
 toc()
-
-
-
-resg <- subset(res, RR=="P. vitt" & nSnp==2000)
-
-ggplot(resg, aes(x=factor(Nesim), y=Nee0/Nesim,fill=factor(sample)))+geom_boxplot()+facet_grid(RR~nSnp)+ylim(c(0,1))
-
 ```
