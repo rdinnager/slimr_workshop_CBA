@@ -135,6 +135,7 @@ sim_run <- slim_run(sim)
 So that ran and gave an exit status of 0. That means the simulation worked and produced no errors. However, we don't have much of use now. This is because the simulation ran, but we didn't tell the simulation to produce anything. So our organisms migrated and mated, died and were born, all inside our computer, with no one watching. We can fix this by generating some output. This will use our first `slimr` verb. These are functions from `slimr` that can be inserted inside a SLiM based simulation that do useful things. In this case we will use `slim_output` to tell the simulation to capture some output and have it returned to R. So, one thing we might want to get out of this simulation is simply the genomes of the organisms at the end of the simulation. That is simple, we can do that like this:
 
 ```{r basic_example2}
+
 sim <- slim_script(
   
   slim_block(initialize(), {
