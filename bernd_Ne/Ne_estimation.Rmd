@@ -345,7 +345,7 @@ system.time(res <- mclapply(1:length(files), function(x) sim(x), mc.cores = 1))
 
 ```
 
-## Collect the results 
+## Collect the results
 
 All the is needed todo is now collect the results from the data.frame and plot
 

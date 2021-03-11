@@ -382,17 +382,18 @@ ticks_df_3 <- ticks_df_2[unique_val,]
 ticks_lab <- as.character(ticks_df_3$V2)
 ticks_breaks <- ticks_df_3$V1
 
-cols <- c("SNP's"="lightgoldenrod","Msats observed"="deeppink","Msats expected"="cyan")
+cols <- c("SNP's"="lightgoldenrod","Msats observed"="deeppink","He"="cyan")
 
 p1 <- ggplot() +
   geom_polygon(data=polygon_haplo.df, aes(long,lat,group=group, fill=Freq)) +
   scale_fill_viridis(name="R square",option= "viridis") +
   new_scale("fill") +   
-  # geom_vline(xintercept = test_var_2$location_test_2,color="red",size=1/2)+
+   geom_vline(xintercept = test_var_2$location_test_2,color="red",size=1/2)+
   geom_rect(data = plot_haplo, aes(xmin=Var2, xmax=Var2+enlarge_factor, ymin=Var1, ymax=Var1+enlarge_factor,fill=Freq),color="black",size=1/10,inherit.aes = F) +
   scale_fill_manual(values = c("red", "blue","black"), labels = c("Deleterious", "Alternative"))+
   # geom_line(data=df_col,aes(x=V1,y=V2),color="orange",inherit.aes = F,size=1/2) +
   # geom_hline(yintercept = mean_column[2],color="red",size=1/2)+
+  geom_line(data=snp_het_alone,aes(x=loc_bp,y=P.AB_pop1,color= "He"),inherit.aes = F,size=0.5,alpha=0.8)+
   
   # geom_step(data=recom_haplo,aes(x=recom_haplo$V1,y=recom_haplo$V2),color="white",inherit.aes = F,size=1/2) +
   # labs(x=NULL, y="Haplotypes", title="Simulation with a chromosome of 500 cM",subtitle = paste(nrow(snp_final),"SNP's ","mean Fst = ",round(final_res[1,18],2)," mean He = ",round(final_res[1,15],2),"s = ", s_gral,"h = ", h_gral,"q = ",q_gral, " with ",loci_number, " initial loci" ))+ 

@@ -14,16 +14,14 @@ library(ggnewscale)
 library(stringr)
 library(parallel)
 library(future)
+library(furrr)
 
+setwd("/cloud/project/Luis_slimR")
 
-# library(conflicted)
-# conflict_prefer("filter", "dplyr")  
-# conflict_prefer("mutate", "dplyr")
 source('hierfstat.R')
 source('gHap.R')
 source('rotate_matrix_2.R')
 source('functions.R')
-# source('functions.R')
 path.folder_sim <- getwd()
 
 Ne <- 10
@@ -90,7 +88,7 @@ isolate_sim <- slim_script(
 )
 
 samp_script <- slimr_script_render(isolate_sim,template = list(mut_rate=2e-5),reps = replicates)
-plan(multisession(workers = 4))
+plan(multisession(workers = 2))
 samp_res <- slim_run(samp_script, throw_error = TRUE,parallel = TRUE)
 
 df_replicates_he <- as.data.frame(matrix(nrow =df_rows ,ncol = replicates ))
@@ -170,7 +168,7 @@ df_small_pop <- df_output_het[which(df_output_het$gen==gen_bottleneck):nrow(df_o
 first_He <- df_output_het[which(df_output_het$gen==gen_bottleneck)-1,"He"]
 df_small_pop$rate_loss <- first_He * (rate_of_loss^(df_small_pop$gen-gen_bottleneck) )
 
-all_sim <- print(ggplot(df_small_pop) +
+all_sim <- ggplot(df_small_pop) +
                    geom_line(aes(x=gen,y=He),colour = "red",size=1) +
                    geom_line(aes(x=gen,y=rate_loss),colour = "blue",size=1) +
                    theme_bw(base_size = 18) +
@@ -178,7 +176,7 @@ all_sim <- print(ggplot(df_small_pop) +
                    labs(x="GENERATIONS", y="He", title=NULL)+ 
                    theme(legend.title=element_blank())+
                    theme(legend.position =  "bottom") +
-                   theme(legend.text=element_text(size=14)))
+                   theme(legend.text=element_text(size=14))
 
 chroms <- as.character(dna$data[[length(dna$data)-2]])
 chroms <- lapply(chroms,str_sub,cbind(pos_deleterious,pos_deleterious)) 

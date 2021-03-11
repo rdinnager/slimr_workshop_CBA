@@ -54,6 +54,7 @@ library(stringr)
 library(parallel)
 library(future)
 library(furrr)
+library(plotly)
 source('hierfstat.R')
 source('gHap.R')
 source('rotate_matrix_2.R')
@@ -64,7 +65,7 @@ source('functions.R')
 
 Most population genetic models assume that loci are inherited by offspring as independent units from their parents due to:
 
--    sexual reproduction
+-   sexual reproduction
 
 -   random mating
 
@@ -183,7 +184,7 @@ sims <- slim_script(
 ![](rate_loss.jpg){width="758"}
 
 ```{r}
-Ne <- 200 # population size of the bottleneck
+Ne <- 100 # population size of the bottleneck
 ini_pop_size <- 1000 # initial population size
 gens <- 1000 # number of generations 
 gen_bottleneck <- gens-100 # generation when bottleneck occurs
@@ -202,7 +203,7 @@ rate_of_loss <- 1 - (1 / (2 * Ne))
 sims_test_Ne <- slim_script(
   
   slim_block(initialize(), {
-    setSeed(42);
+    setSeed(76666);
     # define nucleotide based simulation
     initializeSLiMOptions(nucleotideBased=T);
     # random nucleotides
@@ -304,12 +305,12 @@ all_sim <- print(ggplot(plot_het) +
 # Background selection (BGS)
 
 ```{r}
-Ne <- 200 # population size of the bottleneck
+Ne <- 300 # population size of the bottleneck
 ini_pop_size <- 1000 # initial population size
 gens <- 1000 # number of generations 
 gen_bottleneck <- gens-100 # generation when bottleneck occurs
 s_del <- -0.01 # selection coefficient of deleterious mutations
-dominance <- 0.25 # dominance coefficient of deleterious mutations
+dominance <- 0.5 # dominance coefficient of deleterious mutations
 chr_length <- 10000 # number of nucleotides of the chromosomes
 mut_rate <- 3e-5 # mutation rate 
 cM <- 50 # number of centiMorgans in the chromosome
@@ -323,7 +324,7 @@ rate_of_loss <- 1 - (1 / (2 * Ne))
 sims_BGS <- slim_script(
   
   slim_block(initialize(), {
-    setSeed(42);
+    setSeed(8787);
     # define nucleotide based simulation
     initializeSLiMOptions(nucleotideBased=T);
     # random nucleotides
@@ -428,7 +429,7 @@ all_sim_BGS <- print(ggplot(plot_het_BGS) +
 ## What happens in a small population?
 
 ```{r}
-Ne <- 30 # population size of the bottleneck
+Ne <- 20 # population size of the bottleneck
 ini_pop_size <- 1000 # initial population size
 gens <- 1000 # number of generations 
 gen_bottleneck <- gens-100 # generation when bottleneck occurs
@@ -436,7 +437,7 @@ s_del <- -0.01 # selection coefficient of deleterious mutations
 dominance <- 0.1 # dominance coefficient of deleterious mutations
 chr_length <- 10000 # number of nucleotides of the chromosomes
 mut_rate <- 3e-5 # mutation rate 
-cM <- 50 # number of centiMorgans in the chromosome
+cM <- 10 # number of centiMorgans in the chromosome
 rec_rate <- (cM/100)/chr_length # recombination rate
 
 every_do <- 10 # output every X generation
@@ -447,7 +448,7 @@ rate_of_loss <- 1 - (1 / (2 * Ne))
 sims_AOD <- slim_script(
   
   slim_block(initialize(), {
-    setSeed(58);
+    setSeed(797);
     # define nucleotide based simulation
     initializeSLiMOptions(nucleotideBased=T);
     # random nucleotides
@@ -569,12 +570,17 @@ In this example for a diploid organism with a 3-locus heterozygous haplotype, de
 
 ```{r opts_chunk$set(cache=F)}
 
+# for the moment the following code only works for the last simulations that were performed
 
-size_haplo <- 10
+# minimum size of the haplotypes to look for
+size_haplo <- 100
+# number of loci of the window to calculate LD 
 ld_depth <- 30
 
+# which simulation to use 
 sim <- AOD_res
-which_replicate <- 4
+# which replicate to use 
+which_replicate <- 5
 source('visual.R')
 
 # number of deleterious mutations per individual
@@ -582,10 +588,16 @@ del_per_ind
 
 ```
 
-```{r echo=FALSE, opts_chunk$set(cache=F)}
+```{r}
+# haplotypes plot
 p1
+ggsave(paste0("haplo_1.pdf"),  width = 30, height =10, units = "in", dpi="retina", bg = "transparent" )
+
+#to have a better look at the plot open the pdf file from the files pane
 ```
 
 ```{r echo=FALSE, opts_chunk$set(cache=F)}
+# iterative plot without haplotypes (not supported by plotly yet)
 p2
+
 ```
